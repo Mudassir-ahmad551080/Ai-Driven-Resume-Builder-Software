@@ -1,5 +1,8 @@
 import ai from "../config/ai.js";
 import Resume from "../models/ResumeMode.js";
+import { createRequire } from "module";   // ← line 1 (ESM built-in)
+const require = createRequire(import.meta.url);  // ← line 2 (creates require)
+const pdfParse = require("pdf-parse");    // ← line 3 (now require works)
 
 // Controller to enhance Professional Summary
 export const enhanceProfessionalSummary = async (req, res) => {
@@ -263,6 +266,230 @@ export const analyzeResume = async (req, res) => {
     } catch (error) {
         console.error("Resume Analysis Error:", error);
         return res.status(500).json({ message: "Failed to analyze resume", error: error.message });
+    }
+};
+
+
+// Interview Preparation Controller (Placeholder)
+
+
+// ─────────────────────────────────────────────
+//  POST /api/interview/start
+//  Body: { resumeText: string }
+//  Returns: { question, questionNumber, totalQuestions }
+// ─────────────────────────────────────────────
+export const startInterview = async (req, res) => {
+    try {
+        const { resumeText } = req.body;
+
+        if (!resumeText || resumeText.trim() === "") {
+            return res.status(400).json({ message: "Resume text is required to start the interview." });
+        }
+
+        const systemPrompt = `
+        You are an expert technical interviewer and career coach.
+        You have just read the candidate's resume. Your job is to ask them 7 targeted, professional interview questions — one at a time.
+        
+        STRICT OUTPUT RULE: Return ONLY a valid JSON object. No markdown, no extra text.
+        Return exactly:
+        {
+            "question": "<the interview question>",
+            "questionContext": "<short 1-line reason why you're asking this — e.g., based on their React experience>"
+        }
+
+        RULES:
+        - Ask Question 1 now. Make it a warm opener based on their most notable skill or experience.
+        - Questions must be specific to THEIR resume — not generic.
+        - Keep the question concise (1–2 sentences max).
+        `;
+
+        const response = await ai.chat.completions.create({
+            model: process.env.GROQ_MODEL,
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: `Here is my resume:\n\n${resumeText.slice(0, 3000)}` }
+            ],
+            response_format: { type: "json_object" },
+            temperature: 0.6,
+            max_tokens: 300,
+        });
+
+        const data = JSON.parse(response.choices[0].message.content);
+
+        return res.status(200).json({
+            success: true,
+            question: data.question,
+            questionContext: data.questionContext,
+            questionNumber: 1,
+            totalQuestions: 7,
+        });
+
+    } catch (error) {
+        console.error("Interview Start Error:", error);
+        return res.status(500).json({ message: "Failed to start interview", error: error.message });
+    }
+};
+
+
+// ─────────────────────────────────────────────
+//  POST /api/interview/respond
+//  Body: { resumeText, messages: [{role, content}], questionNumber, userAnswer }
+//  Returns: { question, questionNumber } OR { isComplete, result }
+// ─────────────────────────────────────────────
+export const respondToAnswer = async (req, res) => {
+    try {
+        const { resumeText, messages, questionNumber, userAnswer } = req.body;
+
+        if (!resumeText || !messages || !questionNumber) {
+            return res.status(400).json({ message: "resumeText, messages, and questionNumber are required." });
+        }
+
+        const TOTAL_QUESTIONS = 7;
+        const isLastQuestion = questionNumber >= TOTAL_QUESTIONS;
+
+        // ── FINAL REPORT: after the last answer ──
+        if (isLastQuestion) {
+            const systemPrompt = `
+            You are a strict interview evaluator and career coach.
+            You have the candidate's resume and the full interview transcript.
+            Generate a final structured evaluation.
+            
+            STRICT OUTPUT RULE: Return ONLY a valid JSON object. No markdown, no extra text.
+            Return exactly:
+            {
+                "score": <number 0-100>,
+                "grade": "<A / B / C / D / F>",
+                "performance": "<Excellent / Good / Average / Needs Improvement>",
+                "summary": "<2-sentence overall performance summary>",
+                "strengths": ["<strength>", "<strength>", "<strength>"],
+                "weaknesses": ["<weakness>", "<weakness>", "<weakness>"],
+                "skippedQuestions": <number of questions the user said they don't know or skipped>,
+                "tipsToGetHired": [
+                    { "tip": "<actionable tip title>", "detail": "<1-sentence explanation, personalized to their resume>" },
+                    { "tip": "<actionable tip title>", "detail": "<1-sentence explanation>" },
+                    { "tip": "<actionable tip title>", "detail": "<1-sentence explanation>" },
+                    { "tip": "<actionable tip title>", "detail": "<1-sentence explanation>" },
+                    { "tip": "<actionable tip title>", "detail": "<1-sentence explanation>" }
+                ]
+            }
+
+            SCORING:
+            - Each answered question = up to ~14 points.
+            - Skipped/don't-know answers = 0 points.
+            - Quality of answers: strong/detailed = full points, vague = half points.
+            `;
+
+            const fullConversation = [
+                { role: "user", content: `Resume:\n${resumeText.slice(0, 2000)}` },
+                ...messages,
+                { role: "user", content: userAnswer || "I don't know." }
+            ];
+
+            const response = await ai.chat.completions.create({
+                model: process.env.GROQ_MODEL,
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    ...fullConversation
+                ],
+                response_format: { type: "json_object" },
+                temperature: 0.3,
+                max_tokens: 1024,
+            });
+
+            const result = JSON.parse(response.choices[0].message.content);
+
+            return res.status(200).json({
+                success: true,
+                isComplete: true,
+                result,
+            });
+        }
+
+        // ── NEXT QUESTION ──
+        const nextQuestionNumber = questionNumber + 1;
+        const skipped = !userAnswer || userAnswer.trim() === "" || userAnswer.toLowerCase().includes("don't know") || userAnswer.toLowerCase().includes("skip");
+
+        const systemPrompt = `
+        You are an expert technical interviewer conducting a live interview.
+        You have the candidate's resume and the conversation so far.
+
+        STRICT OUTPUT RULE: Return ONLY a valid JSON object. No markdown, no extra text.
+        Return exactly:
+        {
+            "acknowledgment": "<1-sentence response to their last answer — encouraging if good, gentle if skipped>",
+            "question": "<Question ${nextQuestionNumber} of ${TOTAL_QUESTIONS}: the next interview question>",
+            "questionContext": "<short 1-line reason for this question>"
+        }
+
+        RULES:
+        - If they skipped or said they don't know: acknowledge briefly and move on without dwelling on it.
+        - The next question must be different from all previous questions.
+        - Stay specific to their resume (skills, projects, experience, gaps).
+        - Keep the question to 1–2 sentences.
+        - Never repeat a question.
+        ${skipped ? '- The user just skipped the last question. Acknowledge gently.' : ''}
+        `;
+
+        const fullConversation = [
+            { role: "user", content: `Resume:\n${resumeText.slice(0, 2000)}` },
+            ...messages,
+            { role: "user", content: userAnswer || "(skipped)" }
+        ];
+
+        const response = await ai.chat.completions.create({
+            model: process.env.GROQ_MODEL,
+            messages: [
+                { role: "system", content: systemPrompt },
+                ...fullConversation
+            ],
+            response_format: { type: "json_object" },
+            temperature: 0.6,
+            max_tokens: 300,
+        });
+
+        const data = JSON.parse(response.choices[0].message.content);
+
+        return res.status(200).json({
+            success: true,
+            isComplete: false,
+            acknowledgment: data.acknowledgment,
+            question: data.question,
+            questionContext: data.questionContext,
+            questionNumber: nextQuestionNumber,
+            totalQuestions: TOTAL_QUESTIONS,
+        });
+
+    } catch (error) {
+        console.error("Interview Respond Error:", error);
+        return res.status(500).json({ message: "Failed to process answer", error: error.message });
+    }
+};
+
+
+// ─────────────────────────────────────────────
+//  POST /api/interview/parse-pdf
+//  Body: multipart/form-data — file: PDF
+//  Returns: { resumeText }
+//  (Optional — use if you want backend PDF parsing)
+// ─────────────────────────────────────────────
+export const parsePdfResume = async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ message: "No PDF file uploaded." });
+        }
+
+        const pdfData = await pdfParse(req.file.buffer);
+        const resumeText = pdfData.text;
+
+        if (!resumeText || resumeText.trim() === "") {
+            return res.status(400).json({ message: "Could not extract text from this PDF." });
+        }
+
+        return res.status(200).json({ success: true, resumeText });
+
+    } catch (error) {
+        console.error("PDF Parse Error:", error);
+        return res.status(500).json({ message: "Failed to parse PDF", error: error.message });
     }
 };
 
