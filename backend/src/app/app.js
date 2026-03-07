@@ -10,7 +10,7 @@ const app = express();
 app.use(cors({
   origin: [
     'http://localhost:5173',
-    'https://resume-frontend-psi-one.vercel.app/' // ← replace with your actual frontend URL
+    'https://resume-frontend-psi-one.vercel.app' // ← replace with your actual frontend URL
   ],
   credentials: true
 }));
