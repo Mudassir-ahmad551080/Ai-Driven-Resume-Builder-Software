@@ -2,16 +2,14 @@ import 'dotenv/config';
 import connectDB from './src/db/db.js';
 import app from './src/app/app.js';
 
-// Pehle DB connect karo, phir server start karo
-connectDB().then(() => {
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-  });
-}).catch((error) => {
-  console.log('MongoDB connection failed:', error);
-  process.exit(1);
-});
+// ✅ This runs at import time — works on both Vercel and local
+await connectDB();
 
-// Vercel ke liye export
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 4000;
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
 export default app;
