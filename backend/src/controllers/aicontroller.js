@@ -1,8 +1,5 @@
 import ai from "../config/ai.js";
 import Resume from "../models/ResumeMode.js";
-import { createRequire } from "module";   // ← line 1 (ESM built-in)
-const require = createRequire(import.meta.url);  // ← line 2 (creates require)
-const pdfParse = require("pdf-parse");    // ← line 3 (now require works)
 
 // Controller to enhance Professional Summary
 export const enhanceProfessionalSummary = async (req, res) => {
@@ -466,31 +463,5 @@ export const respondToAnswer = async (req, res) => {
 };
 
 
-// ─────────────────────────────────────────────
-//  POST /api/interview/parse-pdf
-//  Body: multipart/form-data — file: PDF
-//  Returns: { resumeText }
-//  (Optional — use if you want backend PDF parsing)
-// ─────────────────────────────────────────────
-export const parsePdfResume = async (req, res) => {
-    try {
-        if (!req.file) {
-            return res.status(400).json({ message: "No PDF file uploaded." });
-        }
-
-        const pdfData = await pdfParse(req.file.buffer);
-        const resumeText = pdfData.text;
-
-        if (!resumeText || resumeText.trim() === "") {
-            return res.status(400).json({ message: "Could not extract text from this PDF." });
-        }
-
-        return res.status(200).json({ success: true, resumeText });
-
-    } catch (error) {
-        console.error("PDF Parse Error:", error);
-        return res.status(500).json({ message: "Failed to parse PDF", error: error.message });
-    }
-};
 
 // ... existing exports
