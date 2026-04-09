@@ -85,6 +85,14 @@ export const updateResume = async (req, res) => {
         // ... [Keep Title Update Logic] ...
 
         if (!resumeData) {
+            if (title) {
+                const resume = await Resume.findOneAndUpdate(
+                    { userId, _id: resumeId },
+                    { title },
+                    { new: true }
+                );
+                return res.status(200).json({ message: "Title Updated", resume });
+            }
             return res.status(400).json({ message: "No resume data provided for update" });
         }
 
@@ -103,7 +111,7 @@ export const updateResume = async (req, res) => {
                 const response = await imagekit.files.upload({
                     file: imageBufferData,
                     // ✅ FIX 1: Add Date.now() to make filename unique (Busts Browser Cache)
-                    fileName: `resume_${resumeId}_${Date.now()}.png`, 
+                    fileName: `resume_${resumeId}_${Date.now()}.png`,
                     folder: 'user-resumes',
                     transformation: {
                         // ✅ FIX 2: Explicitly use the check we made above
