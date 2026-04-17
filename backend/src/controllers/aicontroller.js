@@ -218,32 +218,54 @@ export const analyzeResume = async (req, res) => {
             return res.status(400).json({ message: "Resume content is required for analysis." });
         }
 
+        // 1. Strict Resume Validation
+        const validationPrompt = `
+        Analyze if the following text is a professional resume or CV.
+        It should contain typical resume sections like Experience, Education, or Skills.
+        If it is NOT a resume (e.g., it's a random story, a letter, a list of groceries, or gibberish), respond with "NOT_A_RESUME".
+        Otherwise, respond with "IS_A_RESUME".
+
+        Text:
+        ${resumeText.slice(0, 1000)}
+        `;
+
+        const validationResponse = await ai.chat.completions.create({
+            model: process.env.GROQ_MODEL,
+            messages: [{ role: "user", content: validationPrompt }],
+            temperature: 0,
+        });
+
+        if (validationResponse.choices[0].message.content.includes("NOT_A_RESUME")) {
+            return res.status(400).json({ message: "The uploaded file does not appear to be a valid resume. Please upload a professional CV." });
+        }
+
+        // 2. Artificial 10-second processing delay
+        await new Promise(resolve => setTimeout(resolve, 10000));
+
         // ✅ Truncate resume to ~3000 chars to leave room for the response
         const truncatedResume = resumeText.slice(0, 3000);
 
         const systemPrompt = `
-        You are a strict ATS (Applicant Tracking System) and expert Hiring Manager.
-        Analyze the provided resume text.
+        You are a brutal, high-standard ATS (Applicant Tracking System) and a cynical Fortune 500 Hiring Manager.
+        Your goal is to find every single flaw in the provided resume. Be extremely critical.
+
+        SCORING LOGIC (Deduction Model):
+        - Start at 100.
+        - Deduct 10-20 points if there are no quantifiable metrics (%, $, numbers) in the experience section.
+        - Deduct 10 points if action verbs are generic (e.g., "helped", "managed", "worked on") instead of powerful (e.g., "orchestrated", "spearheaded", "optimized").
+        - Deduct 10 points for vague professional summaries or "objective" statements.
+        - Deduct 5 points for each missing core skill expected for the role described.
+        - A score of 90+ is RESERVED ONLY for world-class, perfectly optimized resumes. Most "good" resumes should fall between 60-80.
 
         You MUST return ONLY a valid JSON object. No explanation, no markdown, no extra text.
         Return exactly this structure:
         {
             "score": <number 0-100>,
-            "summary": "<one sentence>",
+            "summary": "<a critical one-sentence summary of why the score is what it is>",
             "strengths": ["<point>", "<point>", "<point>"],
             "weaknesses": ["<point>", "<point>", "<point>"],
-            "improvement_steps": [
-                { "section": "<name>", "advice": "<advice>" },
-                { "section": "<name>", "advice": "<advice>" },
-                { "section": "<name>", "advice": "<advice>" }
-            ]
+            "pro_tips": ["<high-impact tip>", "<high-impact tip>", "<high-impact tip>"]
         }
-
-        Scoring Criteria:
-        - Quantifiable results (numbers/metrics) in experience.
-        - Proper use of action verbs.
-        - ATS readability (keywords).
-        - Formatting structure (implied by text organization).
         `;
 
         const response = await ai.chat.completions.create({
@@ -254,7 +276,7 @@ export const analyzeResume = async (req, res) => {
             ],
             response_format: { type: "json_object" },
             temperature: 0.3,
-            max_tokens: 1024, // ✅ explicit budget for the response
+            max_tokens: 1024,
         });
 
         const analysis = JSON.parse(response.choices[0].message.content);
