@@ -306,9 +306,10 @@ export const startInterview = async (req, res) => {
         }
 
         const systemPrompt = `
-        You are an expert technical interviewer and career coach.
-        You have just read the candidate's resume. Your job is to ask them 7 targeted, professional interview questions — one at a time.
-        
+        You are Alex, a professional HR interviewer. You have just reviewed the candidate's resume.
+        Your job is to ask 7 targeted, professional interview questions — one at a time.
+        Mix warmup, behavioral, and technical questions based on their resume.
+
         STRICT OUTPUT RULE: Return ONLY a valid JSON object. No markdown, no extra text.
         Return exactly:
         {
@@ -369,16 +370,17 @@ export const respondToAnswer = async (req, res) => {
         // ── FINAL REPORT: after the last answer ──
         if (isLastQuestion) {
             const systemPrompt = `
-            You are a strict interview evaluator and career coach.
+            You are Alex, a professional HR interviewer.
             You have the candidate's resume and the full interview transcript.
             Generate a final structured evaluation.
-            
+
             STRICT OUTPUT RULE: Return ONLY a valid JSON object. No markdown, no extra text.
             Return exactly:
             {
                 "score": <number 0-100>,
                 "grade": "<A / B / C / D / F>",
                 "performance": "<Excellent / Good / Average / Needs Improvement>",
+                "hiringRecommendation": "<Strong Hire / Hire / Consider / Do Not Hire>",
                 "summary": "<2-sentence overall performance summary>",
                 "strengths": ["<strength>", "<strength>", "<strength>"],
                 "weaknesses": ["<weakness>", "<weakness>", "<weakness>"],
@@ -429,19 +431,21 @@ export const respondToAnswer = async (req, res) => {
         const skipped = !userAnswer || userAnswer.trim() === "" || userAnswer.toLowerCase().includes("don't know") || userAnswer.toLowerCase().includes("skip");
 
         const systemPrompt = `
-        You are an expert technical interviewer conducting a live interview.
+        You are Alex, a professional HR interviewer conducting a live interview.
         You have the candidate's resume and the conversation so far.
+        Acknowledge their last answer naturally before asking the next question.
 
         STRICT OUTPUT RULE: Return ONLY a valid JSON object. No markdown, no extra text.
         Return exactly:
         {
-            "acknowledgment": "<1-sentence response to their last answer — encouraging if good, gentle if skipped>",
+            "acknowledgment": "<1-sentence response to their last answer — react naturally like a real interviewer>",
             "question": "<Question ${nextQuestionNumber} of ${TOTAL_QUESTIONS}: the next interview question>",
             "questionContext": "<short 1-line reason for this question>"
         }
 
         RULES:
         - If they skipped or said they don't know: acknowledge briefly and move on without dwelling on it.
+        - Mix warmup, behavioral, and technical questions.
         - The next question must be different from all previous questions.
         - Stay specific to their resume (skills, projects, experience, gaps).
         - Keep the question to 1–2 sentences.
