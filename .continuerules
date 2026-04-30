@@ -1,0 +1,4 @@
+Always access and modify files from both frontend/ and backend/ folders.
+You have full access to all files inside frontend/ and backend/ directories.
+When asked to make changes, find the relevant file yourself and apply changes directly.
+Never ask me to paste code - read it yourself from the project.
